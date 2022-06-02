@@ -8,6 +8,7 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
+import org.gradle.api.file.RegularFile;
 import org.gradle.api.internal.project.ProjectInternal;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.JavaExec;
@@ -19,6 +20,8 @@ import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.session.BuildSessionLifecycleListener;
 
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 
 public class MicronautTestResourcesGradlePlugin implements Plugin<Project> {
@@ -31,9 +34,10 @@ public class MicronautTestResourcesGradlePlugin implements Plugin<Project> {
                 dependencies.create("io.micronaut.test:micronaut-test-resources-jdbc-postgresql:1.0.0-SNAPSHOT"),
                 dependencies.create("io.micronaut.test:micronaut-test-resources-kafka:1.0.0-SNAPSHOT")
         ));
-
+        Provider<RegularFile> portFile = project.getLayout().getBuildDirectory().file("test-resources-port.txt");
         Provider<ProxyService> proxyService = project.getGradle().getSharedServices().registerIfAbsent("testResourcesProxyService", ProxyService.class, spec -> {
             spec.getParameters().getClasspath().from(proxy);
+            spec.getParameters().getPortFile().set(portFile);
         });
         TaskContainer tasks = project.getTasks();
 
@@ -43,7 +47,19 @@ public class MicronautTestResourcesGradlePlugin implements Plugin<Project> {
         });
 
         TaskProvider<WriteProxySettings> writeTestProperties = tasks.register("writeTestProperties", WriteProxySettings.class, task -> {
-            task.getPort().set(13322);
+            // This is a very ugly hack, but we need the port of the proxy
+            // to be available when the task gets configured
+            Path portFilePath = portFile.get().getAsFile().toPath();
+            proxyService.get(); // force startup of service
+            while (!Files.exists(portFilePath)) {
+                try {
+                    // Give some time for the proxy to start
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+            task.getPort().set(project.getProviders().fileContents(portFile).getAsText().map(Integer::parseInt));
             task.getOutputDirectory().set(project.getLayout().getBuildDirectory().dir("generated-resources/test-resources-proxy"));
         });
         project.getConfigurations().all(conf -> {

@@ -15,12 +15,18 @@
  */
 package io.micronaut.gradle.testresources;
 
+import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.services.BuildService;
 import org.gradle.api.services.BuildServiceParameters;
 import org.gradle.process.ExecOperations;
 
 import javax.inject.Inject;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -28,6 +34,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 abstract class ProxyService implements BuildService<ProxyService.Params> {
     interface Params extends BuildServiceParameters {
         ConfigurableFileCollection getClasspath();
+
+        RegularFileProperty getPortFile();
     }
 
     private static ExecutorService executorService = Executors.newFixedThreadPool(1);
@@ -39,11 +47,23 @@ abstract class ProxyService implements BuildService<ProxyService.Params> {
     @Inject
     public ProxyService() {
         if (STARTED.compareAndSet(false, true)) {
+            File portFile = getParameters().getPortFile().getAsFile().get();
+            Path portFilePath = portFile.toPath();
+            if (Files.exists(portFilePath)) {
+                try {
+                    Files.delete(portFilePath);
+                } catch (IOException e) {
+                    throw new GradleException("Unable to delete port file", e);
+                }
+            }
             executorService.submit(() -> {
                 getExecOperations().javaexec(spec -> {
                     spec.classpath(getParameters().getClasspath().getFiles());
                     spec.getMainClass().set("io.micronaut.testresources.proxy.Application");
-                    spec.args("-Dmicronaut.server.port=13322", "-Dmicronaut.http.client.read-timeout=60s");
+                    spec.args(
+                            "-Dmicronaut.http.client.read-timeout=60s",
+                            "--port-file=" + portFile.getAbsolutePath()
+                    );
                 });
             });
         }

@@ -37,7 +37,10 @@ public class MicronautTestResourcesGradlePlugin implements Plugin<Project> {
         });
         TaskContainer tasks = project.getTasks();
 
-        TaskProvider<StartProxy> startProxy = tasks.register("startProxy", StartProxy.class, task -> task.getProxy().set(proxyService));
+        TaskProvider<StartProxy> startProxy = tasks.register("startProxy", StartProxy.class, task -> {
+            task.getProxy().set(proxyService);
+            task.getClasspath().from(proxy);
+        });
 
         TaskProvider<WriteProxySettings> writeTestProperties = tasks.register("writeTestProperties", WriteProxySettings.class, task -> {
             task.getPort().set(13322);

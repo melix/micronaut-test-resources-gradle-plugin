@@ -18,6 +18,7 @@ package io.micronaut.gradle.testresources;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.RegularFileProperty;
+import org.gradle.api.provider.Property;
 import org.gradle.api.services.BuildService;
 import org.gradle.api.services.BuildServiceParameters;
 import org.gradle.process.ExecOperations;
@@ -25,6 +26,7 @@ import org.gradle.process.ExecOperations;
 import javax.inject.Inject;
 import java.io.File;
 import java.io.IOException;
+import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
@@ -36,6 +38,8 @@ abstract class ProxyService implements BuildService<ProxyService.Params> {
         ConfigurableFileCollection getClasspath();
 
         RegularFileProperty getPortFile();
+
+        Property<Integer> getPort();
     }
 
     private static ExecutorService executorService = Executors.newFixedThreadPool(1);
@@ -56,17 +60,38 @@ abstract class ProxyService implements BuildService<ProxyService.Params> {
                     throw new GradleException("Unable to delete port file", e);
                 }
             }
-            executorService.submit(() -> {
-                getExecOperations().javaexec(spec -> {
-                    spec.classpath(getParameters().getClasspath().getFiles());
-                    spec.getMainClass().set("io.micronaut.testresources.proxy.Application");
-                    spec.args(
-                            "-Dmicronaut.http.client.read-timeout=60s",
-                            "--port-file=" + portFile.getAbsolutePath()
-                    );
-                });
-            });
+            Property<Integer> port = getParameters().getPort();
+            if (port.isPresent()) {
+                boolean alreadyStarted;
+                try {
+                    Socket socket = new Socket("localhost", port.get());
+                    socket.close();
+                    alreadyStarted = true;
+                    System.out.println("Test resources proxy already started on port " + port.get());
+                } catch (IOException e) {
+                    alreadyStarted = false;
+                }
+                if (alreadyStarted) {
+                    return;
+                }
+            }
+            startProxy(port, portFile);
         }
+    }
+
+    private void startProxy(Property<Integer> explicitPort, File outputPortFile) {
+        executorService.submit(() -> {
+            getExecOperations().javaexec(spec -> {
+                spec.classpath(getParameters().getClasspath().getFiles());
+                spec.getMainClass().set("io.micronaut.testresources.proxy.Application");
+                spec.args("-Dmicronaut.http.client.read-timeout=60s");
+                if (explicitPort.isPresent()) {
+                    spec.args("-Dmicronaut.server.port=" + explicitPort.get());
+                } else {
+                    spec.args("--port-file=" + outputPortFile.getAbsolutePath());
+                }
+            });
+        });
     }
 
     static void reset() {

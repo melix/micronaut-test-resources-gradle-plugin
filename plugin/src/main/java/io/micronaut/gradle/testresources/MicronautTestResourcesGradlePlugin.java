@@ -3,10 +3,13 @@
  */
 package io.micronaut.gradle.testresources;
 
+import io.micronaut.testresources.classpath.MavenDependency;
+import io.micronaut.testresources.classpath.TestResourcesClasspath;
 import org.gradle.api.GradleException;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.artifacts.dsl.DependencyHandler;
 import org.gradle.api.file.RegularFile;
 import org.gradle.api.internal.project.ProjectInternal;
@@ -22,19 +25,26 @@ import org.gradle.internal.session.BuildSessionLifecycleListener;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class MicronautTestResourcesGradlePlugin implements Plugin<Project> {
     public void apply(Project project) {
         Configuration server = createTestResourcesServerConfiguration(project);
         DependencyHandler dependencies = project.getDependencies();
-        server.getDependencies().addAll(Arrays.asList(
-                dependencies.create("io.micronaut.test:micronaut-test-resources-server:1.0.0-SNAPSHOT"),
-                dependencies.create("io.micronaut.test:micronaut-test-resources-testcontainers:1.0.0-SNAPSHOT"),
-                dependencies.create("io.micronaut.test:micronaut-test-resources-jdbc-mysql:1.0.0-SNAPSHOT"),
-                dependencies.create("io.micronaut.test:micronaut-test-resources-jdbc-postgresql:1.0.0-SNAPSHOT"),
-                dependencies.create("io.micronaut.test:micronaut-test-resources-kafka:1.0.0-SNAPSHOT")
-        ));
+        server.getDependencies().addAllLater(project.getProviders().provider(() -> {
+            List<MavenDependency> mavenDependencies = project.getConfigurations().getByName("runtimeClasspath")
+                    .getAllDependencies()
+                    .stream()
+                    .filter(ModuleDependency.class::isInstance)
+                    .map(ModuleDependency.class::cast)
+                    .map(d -> new MavenDependency(d.getGroup(), d.getName(), d.getVersion()))
+                    .collect(Collectors.toList());
+            return TestResourcesClasspath.inferTestResourcesClasspath(mavenDependencies)
+                    .stream()
+                    .map(d -> dependencies.create(d.toString()))
+                    .collect(Collectors.toList());
+        }));
         Provider<RegularFile> portFile = project.getLayout().getBuildDirectory().file("test-resources-port.txt");
         Provider<Integer> explicitPort = project.getProviders().systemProperty("micronaut.test-resources.server.port").map(Integer::parseInt);
         Provider<TestResourcesService> testResourcesService = project.getGradle().getSharedServices().registerIfAbsent("testResourcesService", TestResourcesService.class, spec -> {

@@ -4,9 +4,11 @@ plugins {
 
 repositories {
     mavenCentral()
+    mavenLocal()
 }
 
 dependencies {
+    implementation("io.micronaut.test:micronaut-test-resources-classpath:1.0.0-SNAPSHOT")
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
 }
 

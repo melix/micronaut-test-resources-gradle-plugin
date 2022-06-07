@@ -26,37 +26,38 @@ import java.util.Arrays;
 
 public class MicronautTestResourcesGradlePlugin implements Plugin<Project> {
     public void apply(Project project) {
-        Configuration proxy = createProxyConfiguration(project);
+        Configuration server = createTestResourcesServerConfiguration(project);
         DependencyHandler dependencies = project.getDependencies();
-        proxy.getDependencies().addAll(Arrays.asList(
-                dependencies.create("io.micronaut.test:micronaut-test-resources-proxy:1.0.0-SNAPSHOT"),
+        server.getDependencies().addAll(Arrays.asList(
+                dependencies.create("io.micronaut.test:micronaut-test-resources-server:1.0.0-SNAPSHOT"),
+                dependencies.create("io.micronaut.test:micronaut-test-resources-testcontainers:1.0.0-SNAPSHOT"),
                 dependencies.create("io.micronaut.test:micronaut-test-resources-jdbc-mysql:1.0.0-SNAPSHOT"),
                 dependencies.create("io.micronaut.test:micronaut-test-resources-jdbc-postgresql:1.0.0-SNAPSHOT"),
                 dependencies.create("io.micronaut.test:micronaut-test-resources-kafka:1.0.0-SNAPSHOT")
         ));
         Provider<RegularFile> portFile = project.getLayout().getBuildDirectory().file("test-resources-port.txt");
         Provider<Integer> explicitPort = project.getProviders().systemProperty("micronaut.test-resources.server.port").map(Integer::parseInt);
-        Provider<ProxyService> proxyService = project.getGradle().getSharedServices().registerIfAbsent("testResourcesProxyService", ProxyService.class, spec -> {
-            spec.getParameters().getClasspath().from(proxy);
+        Provider<TestResourcesService> testResourcesService = project.getGradle().getSharedServices().registerIfAbsent("testResourcesService", TestResourcesService.class, spec -> {
+            spec.getParameters().getClasspath().from(server);
             spec.getParameters().getPortFile().set(portFile);
             spec.getParameters().getPort().convention(explicitPort);
         });
         TaskContainer tasks = project.getTasks();
 
-        TaskProvider<StartProxy> startProxy = tasks.register("startProxy", StartProxy.class, task -> {
-            task.getProxy().set(proxyService);
-            task.getClasspath().from(proxy);
+        TaskProvider<StartTestResourcesService> startTestResourcesService = tasks.register("startTestResourcesService", StartTestResourcesService.class, task -> {
+            task.getServer().set(testResourcesService);
+            task.getClasspath().from(server);
         });
 
-        TaskProvider<WriteProxySettings> writeTestProperties = tasks.register("writeTestProperties", WriteProxySettings.class, task -> {
+        TaskProvider<WriteServerSettings> writeTestProperties = tasks.register("writeTestResourceProperties", WriteServerSettings.class, task -> {
             if (!explicitPort.isPresent()) {
-                // This is a very ugly hack, but we need the port of the proxy
+                // This is a very ugly hack, but we need the port of the server
                 // to be available when the task gets configured
                 Path portFilePath = portFile.get().getAsFile().toPath();
-                proxyService.get(); // force startup of service
+                testResourcesService.get(); // force startup of service
                 while (!Files.exists(portFilePath)) {
                     try {
-                        // Give some time for the proxy to start
+                        // Give some time for the server to start
                         Thread.sleep(10);
                     } catch (InterruptedException e) {
                         break;
@@ -64,7 +65,7 @@ public class MicronautTestResourcesGradlePlugin implements Plugin<Project> {
                 }
             }
             task.getPort().set(explicitPort.orElse(project.getProviders().fileContents(portFile).getAsText().map(Integer::parseInt)));
-            task.getOutputDirectory().set(project.getLayout().getBuildDirectory().dir("generated-resources/test-resources-proxy"));
+            task.getOutputDirectory().set(project.getLayout().getBuildDirectory().dir("generated-resources/test-resources-server"));
         });
         project.getConfigurations().all(conf -> {
             String name = conf.getName();
@@ -74,13 +75,13 @@ public class MicronautTestResourcesGradlePlugin implements Plugin<Project> {
             }
         });
 
-        tasks.withType(Test.class).configureEach(t -> t.dependsOn(startProxy));
-        tasks.withType(JavaExec.class).configureEach(t -> t.dependsOn(startProxy));
+        tasks.withType(Test.class).configureEach(t -> t.dependsOn(startTestResourcesService));
+        tasks.withType(JavaExec.class).configureEach(t -> t.dependsOn(startTestResourcesService));
 
-        configureProxyReset((ProjectInternal) project);
+        configureServiceReset((ProjectInternal) project);
     }
 
-    private void configureProxyReset(ProjectInternal project) {
+    private void configureServiceReset(ProjectInternal project) {
         ServiceRegistry services = project.getServices();
         ListenerManager listenerManager = services.get(ListenerManager.class);
         Field parentField;
@@ -92,7 +93,7 @@ public class MicronautTestResourcesGradlePlugin implements Plugin<Project> {
             listenerManager.addListener(new BuildSessionLifecycleListener() {
                 @Override
                 public void beforeComplete() {
-                    ProxyService.reset();
+                    TestResourcesService.reset();
                 }
             });
         } catch (NoSuchFieldException | IllegalAccessException e) {
@@ -100,9 +101,9 @@ public class MicronautTestResourcesGradlePlugin implements Plugin<Project> {
         }
     }
 
-    private Configuration createProxyConfiguration(Project project) {
-        return project.getConfigurations().create("proxy", conf -> {
-            conf.setDescription("Dependencies for the Micronaut test resources proxy");
+    private Configuration createTestResourcesServerConfiguration(Project project) {
+        return project.getConfigurations().create("testresources", conf -> {
+            conf.setDescription("Dependencies for the Micronaut test resources service");
             conf.setCanBeConsumed(false);
             conf.setCanBeResolved(true);
         });

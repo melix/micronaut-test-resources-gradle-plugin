@@ -25,21 +25,21 @@ import org.gradle.api.tasks.TaskAction;
 
 import javax.inject.Inject;
 
-abstract class StartProxy extends DefaultTask {
+abstract class StartTestResourcesService extends DefaultTask {
 
     @InputFiles
     @Classpath
     abstract ConfigurableFileCollection getClasspath();
 
     @Internal
-    abstract Property<ProxyService> getProxy();
+    abstract Property<TestResourcesService> getServer();
 
     @Inject
-    public StartProxy() {
+    public StartTestResourcesService() {
     }
 
     @TaskAction
-    public void startProxy() {
-        getProxy().get();
+    public void startService() {
+        getServer().get();
     }
 }

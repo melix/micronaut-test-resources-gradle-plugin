@@ -29,7 +29,7 @@ import java.io.FileOutputStream;
 import java.io.PrintWriter;
 
 @CacheableTask
-public abstract class WriteProxySettings extends DefaultTask {
+public abstract class WriteServerSettings extends DefaultTask {
     @OutputDirectory
     public abstract DirectoryProperty getOutputDirectory();
 
@@ -40,7 +40,7 @@ public abstract class WriteProxySettings extends DefaultTask {
     void writeProperties() throws FileNotFoundException {
         File propertiesFile = getOutputDirectory().file("test-resources.properties").get().getAsFile();
         try (PrintWriter prn = new PrintWriter(new FileOutputStream(propertiesFile))) {
-            prn.println("proxy.uri=http\\://localhost\\:" + getPort().get());
+            prn.println("server.uri=http\\://localhost\\:" + getPort().get());
         }
     }
 }

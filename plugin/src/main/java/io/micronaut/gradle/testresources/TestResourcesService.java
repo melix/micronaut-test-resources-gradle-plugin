@@ -33,7 +33,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-abstract class ProxyService implements BuildService<ProxyService.Params> {
+abstract class TestResourcesService implements BuildService<TestResourcesService.Params> {
     interface Params extends BuildServiceParameters {
         ConfigurableFileCollection getClasspath();
 
@@ -49,7 +49,7 @@ abstract class ProxyService implements BuildService<ProxyService.Params> {
     protected abstract ExecOperations getExecOperations();
 
     @Inject
-    public ProxyService() {
+    public TestResourcesService() {
         if (STARTED.compareAndSet(false, true)) {
             File portFile = getParameters().getPortFile().getAsFile().get();
             Path portFilePath = portFile.toPath();
@@ -67,7 +67,7 @@ abstract class ProxyService implements BuildService<ProxyService.Params> {
                     Socket socket = new Socket("localhost", port.get());
                     socket.close();
                     alreadyStarted = true;
-                    System.out.println("Test resources proxy already started on port " + port.get());
+                    System.out.println("Test resources service already started on port " + port.get());
                 } catch (IOException e) {
                     alreadyStarted = false;
                 }
@@ -75,15 +75,15 @@ abstract class ProxyService implements BuildService<ProxyService.Params> {
                     return;
                 }
             }
-            startProxy(port, portFile);
+            startService(port, portFile);
         }
     }
 
-    private void startProxy(Property<Integer> explicitPort, File outputPortFile) {
+    private void startService(Property<Integer> explicitPort, File outputPortFile) {
         executorService.submit(() -> {
             getExecOperations().javaexec(spec -> {
                 spec.classpath(getParameters().getClasspath().getFiles());
-                spec.getMainClass().set("io.micronaut.testresources.proxy.Application");
+                spec.getMainClass().set("io.micronaut.testresources.server.Application");
                 spec.args("-Dmicronaut.http.client.read-timeout=60s");
                 if (explicitPort.isPresent()) {
                     spec.args("-Dmicronaut.server.port=" + explicitPort.get());

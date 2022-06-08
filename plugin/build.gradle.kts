@@ -4,11 +4,13 @@ plugins {
 
 repositories {
     mavenCentral()
-    mavenLocal()
+    maven {
+        url = uri("https://s01.oss.sonatype.org/content/repositories/snapshots")
+    }
 }
 
 dependencies {
-    implementation("io.micronaut.test:micronaut-test-resources-classpath:1.0.0-SNAPSHOT")
+    implementation("io.micronaut.testresources:micronaut-test-resources-classpath:1.0.0-SNAPSHOT")
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.1")
 }
 

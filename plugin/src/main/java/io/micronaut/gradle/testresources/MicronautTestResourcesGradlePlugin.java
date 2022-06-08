@@ -80,7 +80,7 @@ public class MicronautTestResourcesGradlePlugin implements Plugin<Project> {
         project.getConfigurations().all(conf -> {
             String name = conf.getName();
             if ("developmentOnly".equals(name) || "testRuntimeOnly".equals(name)) {
-                conf.getDependencies().add(dependencies.create("io.micronaut.test:micronaut-test-resources-client:1.0.0-SNAPSHOT"));
+                conf.getDependencies().add(dependencies.create("io.micronaut.testresources:micronaut-test-resources-client:1.0.0-SNAPSHOT"));
                 conf.getDependencies().add(dependencies.create(project.files(writeTestProperties)));
             }
         });
